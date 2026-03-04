@@ -223,22 +223,52 @@ export default function App() {
     setSaveError(null);
     
     try {
-      // Get IP
+      // Get IP with multiple fallbacks
       let ip: string | null = null;
-      try {
-        const ipRes = await fetch('https://api.ipify.org?format=json', { mode: 'cors' });
-        if (ipRes.ok) {
-          const ipData = await ipRes.json();
-          ip = ipData.ip;
+      const providers = [
+        'https://api.ipify.org?format=json',
+        'https://api64.ipify.org?format=json',
+        'https://ipapi.co/json/',
+        'https://api.db-ip.com/v2/free/self'
+      ];
+
+      for (const url of providers) {
+        try {
+          const res = await fetch(url, { mode: 'cors' });
+          if (res.ok) {
+            if (url.endsWith('json') || url.includes('self') || url.includes('json')) {
+              const data = await res.json();
+              ip = data.ip || data.ipAddress || data.address;
+            } else {
+              ip = await res.text();
+            }
+            if (ip && ip.trim()) {
+              ip = ip.trim();
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch IP from ${url}:`, e);
         }
-      } catch (ipErr) {
-        console.warn('Could not fetch IP:', ipErr);
+      }
+
+      // Last resort: plain text ipify
+      if (!ip) {
+        try {
+          const res = await fetch('https://api.ipify.org', { mode: 'cors' });
+          if (res.ok) {
+            const text = await res.text();
+            if (text && text.trim()) ip = text.trim();
+          }
+        } catch (e) {
+          console.warn('Final IP fetch attempt failed:', e);
+        }
       }
 
       const { error } = await supabase.from('hiscores').insert({
         fecha_hora: new Date().toISOString(),
         ip: ip,
-        mail: user?.email || ip || 'Anónimo',
+        mail: user ? (user.email || 'Usuario sin email') : (ip || 'Anónimo'),
         user_id: user?.id || null,
         nivel: difficulty,
         puntos: Math.round(averageDistance)
