@@ -85,6 +85,8 @@ export default function App() {
   const [showCookieConsent, setShowCookieConsent] = useState(false);
   const [showHiScores, setShowHiScores] = useState(false);
   const [hiScoresData, setHiScoresData] = useState<any[]>([]);
+  const [isSavingScore, setIsSavingScore] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -211,14 +213,24 @@ export default function App() {
   };
 
   const saveHiScore = async (averageDistance: number) => {
-    if (!supabase) return;
+    if (!supabase) {
+      console.warn('Supabase not configured');
+      setSaveError('Supabase no configurado. Las puntuaciones no se guardarán.');
+      return;
+    }
+    
+    setIsSavingScore(true);
+    setSaveError(null);
+    
     try {
       // Get IP
       let ip = 'Unknown';
       try {
-        const ipRes = await fetch('https://api.ipify.org?format=json');
-        const ipData = await ipRes.json();
-        ip = ipData.ip;
+        const ipRes = await fetch('https://api.ipify.org?format=json', { mode: 'cors' });
+        if (ipRes.ok) {
+          const ipData = await ipRes.json();
+          ip = ipData.ip;
+        }
       } catch (ipErr) {
         console.warn('Could not fetch IP:', ipErr);
       }
@@ -234,23 +246,16 @@ export default function App() {
 
       if (error) {
         console.error('Error saving hi-score:', error);
-        // If it fails, maybe the table name or columns are different?
-        // Let's try to log more info
-        console.log('Attempted to save:', {
-          fecha_hora: new Date().toISOString(),
-          ip: ip,
-          mail: user?.email || null,
-          user_id: user?.id || null,
-          nivel: difficulty,
-          puntos: Math.round(averageDistance)
-        });
+        setSaveError(`Error al guardar: ${error.message}`);
       } else {
         console.log('Hi-score saved successfully');
-        // Refresh scores if modal is open or about to be
         fetchHiScores();
       }
-    } catch (e) {
-      console.error('Failed to save hi-score:', e);
+    } catch (err: any) {
+      console.error('Unexpected error saving score:', err);
+      setSaveError(`Error inesperado: ${err.message || 'Desconocido'}`);
+    } finally {
+      setIsSavingScore(false);
     }
   };
 
@@ -800,6 +805,25 @@ export default function App() {
                 {(roundResults.reduce((a, b) => a + b, 0) / roundResults.length).toFixed(1)}
                 <span className="text-sm font-bold text-stone-400 ml-1">km</span>
               </p>
+              
+              <div className="mt-4 py-2 px-3 bg-stone-800 rounded-lg text-[10px]">
+                {isSavingScore ? (
+                  <div className="flex items-center gap-2 text-stone-400">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Guardando puntuación...
+                  </div>
+                ) : saveError ? (
+                  <div className="text-rose-400 font-bold">
+                    ⚠️ {saveError}
+                  </div>
+                ) : (
+                  <div className="text-emerald-400 font-bold flex items-center gap-2">
+                    <ShieldCheck className="w-3 h-3" />
+                    Puntuación guardada
+                  </div>
+                )}
+              </div>
+
               <button 
                 onClick={startGame}
                 className="mt-4 w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-2 rounded-xl transition-colors text-sm"
