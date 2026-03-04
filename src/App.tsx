@@ -949,15 +949,34 @@ export default function App() {
       </div>
 
       {/* Footer */}
-      <footer className="h-10 bg-white border-t border-stone-200 flex items-center justify-between px-8 text-[10px] text-stone-400 font-bold uppercase tracking-widest">
-        <div className="flex gap-4">
-          <span>Provincias: {provinces.length}</span>
-          <span>Municipios: {municipalities.length}</span>
-          {!user && <span className="text-amber-500">Partidas hoy: {gamesToday}/5</span>}
+      <footer className="bg-white border-t border-stone-200 flex flex-col px-8 py-2 text-[10px] text-stone-400 font-bold uppercase tracking-widest">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex gap-4">
+            <span>Provincias: {provinces.length}</span>
+            <span>Municipios: {municipalities.length}</span>
+            {!user && <span className="text-amber-500">Partidas hoy: {gamesToday}/5</span>}
+          </div>
+          <div className="flex gap-4 items-center">
+            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Click: Marcar</span>
+            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" /> Click Derecho: Mover</span>
+          </div>
         </div>
-        <div className="flex gap-4 items-center">
-          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Click: Marcar</span>
-          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" /> Click Derecho: Mover</span>
+        <div className="flex flex-col md:flex-row items-center justify-between pt-1 border-t border-stone-50 gap-2">
+          <span className="opacity-80">Aitor Sánchez Gutiérrez © 2026 - Reservados todos los derechos</span>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 items-center lowercase tracking-normal font-medium">
+            <span className="flex items-center gap-1">
+              <span className="uppercase text-[9px] font-black opacity-50">Contacto:</span>
+              <a href="mailto:blog.cottage627@passinbox.com" className="hover:text-stone-600 transition-colors">blog.cottage627@passinbox.com</a>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="uppercase text-[9px] font-black opacity-50">Blog:</span>
+              <a href="https://aitorblog.infinityfreeapp.com" target="_blank" rel="noopener noreferrer" className="hover:text-stone-600 transition-colors">aitorblog.infinityfreeapp.com</a>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="uppercase text-[9px] font-black opacity-50">Más apps:</span>
+              <a href="https://aitorhub.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-stone-600 transition-colors">aitorhub.vercel.app</a>
+            </span>
+          </div>
         </div>
       </footer>
 
