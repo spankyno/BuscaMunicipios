@@ -157,14 +157,19 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Auth listener
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
+    let sub: { unsubscribe: () => void } | null = null;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+    // Auth listener
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setUser(session?.user ?? null);
+      });
+
+      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null);
+      });
+      sub = data.subscription;
+    }
 
     // Cookie consent
     const consent = Cookies.get('cookie_consent');
@@ -177,7 +182,9 @@ export default function App() {
     const games = parseInt(Cookies.get(`games_${today}`) || '0');
     setGamesToday(games);
 
-    return () => subscription.unsubscribe();
+    return () => {
+      if (sub) sub.unsubscribe();
+    };
   }, []);
 
   const incrementGameCount = () => {
@@ -188,6 +195,10 @@ export default function App() {
   };
 
   const fetchHiScores = async () => {
+    if (!supabase) {
+      console.warn('Supabase not configured');
+      return;
+    }
     const { data, error } = await supabase
       .from('hiscores')
       .select('*')
@@ -200,20 +211,23 @@ export default function App() {
   };
 
   const saveHiScore = async (averageDistance: number) => {
+    if (!supabase) return;
     try {
       // Get IP
       const ipRes = await fetch('https://api.ipify.org?format=json');
       const { ip } = await ipRes.json();
 
-      const { error } = await supabase.from('hiscores').insert({
-        fecha_hora: new Date().toISOString(),
-        IP: ip,
-        mail: user?.email || null,
-        nivel: difficulty,
-        puntos: averageDistance
-      });
+      if (supabase) {
+        const { error } = await supabase.from('hiscores').insert({
+          fecha_hora: new Date().toISOString(),
+          IP: ip,
+          mail: user?.email || null,
+          nivel: difficulty,
+          puntos: averageDistance
+        });
 
-      if (error) console.error('Error saving hi-score:', error);
+        if (error) console.error('Error saving hi-score:', error);
+      }
     } catch (e) {
       console.error('Failed to save hi-score:', e);
     }
@@ -223,6 +237,12 @@ export default function App() {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError(null);
+
+    if (!supabase) {
+      setAuthError('El servicio de autenticación no está configurado.');
+      setAuthLoading(false);
+      return;
+    }
 
     try {
       if (authMode === 'signup') {
@@ -248,7 +268,9 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
   };
 
   useEffect(() => {
