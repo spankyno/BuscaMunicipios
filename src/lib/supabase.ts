@@ -12,7 +12,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // create table hiscores (
 //   id uuid default gen_random_uuid() primary key,
 //   fecha_hora timestamptz default now(),
-//   ip text,
+//   ip inet,
 //   mail text,
 //   user_id uuid references auth.users(id),
 //   nivel int4,

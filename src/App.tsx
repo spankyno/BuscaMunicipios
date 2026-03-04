@@ -224,7 +224,7 @@ export default function App() {
     
     try {
       // Get IP
-      let ip = 'Unknown';
+      let ip: string | null = null;
       try {
         const ipRes = await fetch('https://api.ipify.org?format=json', { mode: 'cors' });
         if (ipRes.ok) {
