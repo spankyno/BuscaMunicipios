@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { MapPin, RefreshCw, Info, Navigation2 } from 'lucide-react';
+import { MapPin, RefreshCw, Info, Navigation2, Trophy, User, LogOut, X, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, GeoJSON, CircleMarker, Polyline, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import Cookies from 'js-cookie';
+import { supabase } from './lib/supabase';
 import { FALLBACK_PROVINCES, FALLBACK_MUNICIPALITIES } from './data/fallbackData';
 
 // Fix Leaflet default icon issue
@@ -78,6 +80,17 @@ export default function App() {
   const [distance, setDistance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [gamesToday, setGamesToday] = useState(0);
+  const [showCookieConsent, setShowCookieConsent] = useState(false);
+  const [showHiScores, setShowHiScores] = useState(false);
+  const [hiScoresData, setHiScoresData] = useState<any[]>([]);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [dataStatus, setDataStatus] = useState<{
     provinces: 'loading' | 'ok' | 'error' | 'fallback';
     municipalities: 'loading' | 'ok' | 'error' | 'fallback';
@@ -142,6 +155,101 @@ export default function App() {
   };
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Auth listener
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    // Cookie consent
+    const consent = Cookies.get('cookie_consent');
+    if (!consent) {
+      setShowCookieConsent(true);
+    }
+
+    // Game limit tracking
+    const today = new Date().toISOString().split('T')[0];
+    const games = parseInt(Cookies.get(`games_${today}`) || '0');
+    setGamesToday(games);
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const incrementGameCount = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const newCount = gamesToday + 1;
+    setGamesToday(newCount);
+    Cookies.set(`games_${today}`, newCount.toString(), { expires: 1 });
+  };
+
+  const fetchHiScores = async () => {
+    const { data, error } = await supabase
+      .from('hiscores')
+      .select('*')
+      .order('puntos', { ascending: true }) // Lower average distance is better
+      .limit(50);
+    
+    if (!error && data) {
+      setHiScoresData(data);
+    }
+  };
+
+  const saveHiScore = async (averageDistance: number) => {
+    try {
+      // Get IP
+      const ipRes = await fetch('https://api.ipify.org?format=json');
+      const { ip } = await ipRes.json();
+
+      const { error } = await supabase.from('hiscores').insert({
+        fecha_hora: new Date().toISOString(),
+        IP: ip,
+        mail: user?.email || null,
+        nivel: difficulty,
+        puntos: averageDistance
+      });
+
+      if (error) console.error('Error saving hi-score:', error);
+    } catch (e) {
+      console.error('Failed to save hi-score:', e);
+    }
+  };
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError(null);
+
+    try {
+      if (authMode === 'signup') {
+        const { error } = await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+        });
+        if (error) throw error;
+        alert('Registro completado. Por favor, verifica tu email.');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword,
+        });
+        if (error) throw error;
+      }
+      setShowAuthModal(false);
+    } catch (err: any) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -338,6 +446,8 @@ export default function App() {
         nextRound();
       } else {
         setGameStatus('finished');
+        const avg = (newResults.reduce((a, b) => a + b, 0) / newResults.length);
+        saveHiScore(avg);
       }
     }, 1500);
   };
@@ -354,6 +464,12 @@ export default function App() {
   };
 
   const startGame = () => {
+    if (!user && gamesToday >= 5) {
+      setShowAuthModal(true);
+      setAuthError('Has alcanzado el límite de 5 partidas diarias. Regístrate para seguir jugando.');
+      return;
+    }
+    incrementGameCount();
     setGameStatus('playing');
     setCurrentRound(0);
     setRoundResults([]);
@@ -431,7 +547,7 @@ export default function App() {
     weight: 1,
     opacity: 1,
     color: '#334155',
-    fillOpacity: 0.7
+    fillOpacity: 0.95
   };
 
   const onEachProvince = (feature: any, layer: any) => {
@@ -439,14 +555,14 @@ export default function App() {
       mouseover: (e: any) => {
         const l = e.target;
         l.setStyle({
-          fillOpacity: 0.9,
+          fillOpacity: 1.0,
           fillColor: '#fde68a'
         });
       },
       mouseout: (e: any) => {
         const l = e.target;
         l.setStyle({
-          fillOpacity: 0.7,
+          fillOpacity: 0.95,
           fillColor: '#fef3c7'
         });
       }
@@ -523,6 +639,37 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-6">
+          {/* Auth Status */}
+          <div className="flex items-center gap-3">
+            {user ? (
+              <div className="flex items-center gap-2 bg-stone-100 px-3 py-1.5 rounded-xl border border-stone-200">
+                <User className="w-4 h-4 text-stone-500" />
+                <span className="text-xs font-bold text-stone-700">{user.email}</span>
+                <button onClick={handleLogout} className="text-stone-400 hover:text-red-500 transition-colors">
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setShowAuthModal(true)}
+                className="text-xs font-bold text-stone-600 hover:text-stone-900 px-3 py-1.5 bg-stone-100 rounded-xl border border-stone-200 transition-colors"
+              >
+                Entrar / Registro
+              </button>
+            )}
+          </div>
+
+          <button 
+            onClick={() => {
+              fetchHiScores();
+              setShowHiScores(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-xl font-bold text-xs hover:bg-amber-200 transition-colors"
+          >
+            <Trophy className="w-4 h-4" />
+            Hi Scores
+          </button>
+
           {/* Difficulty Selector */}
           <div className="flex bg-stone-100 p-1 rounded-xl border border-stone-200">
             {(Object.keys(DIFFICULTY_CONFIG).map(Number) as Difficulty[]).map((d) => (
@@ -706,12 +853,181 @@ export default function App() {
         <div className="flex gap-4">
           <span>Provincias: {provinces.length}</span>
           <span>Municipios: {municipalities.length}</span>
+          {!user && <span className="text-amber-500">Partidas hoy: {gamesToday}/5</span>}
         </div>
         <div className="flex gap-4 items-center">
           <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Click: Marcar</span>
           <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" /> Click Derecho: Mover</span>
         </div>
       </footer>
+
+      {/* Cookie Consent Banner */}
+      <AnimatePresence>
+        {showCookieConsent && (
+          <motion.div 
+            initial={{ y: 100 }}
+            animate={{ y: 0 }}
+            exit={{ y: 100 }}
+            className="fixed bottom-4 left-4 right-4 z-[2000] bg-stone-900 text-white p-6 rounded-3xl shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4 border border-white/10"
+          >
+            <div className="flex items-center gap-4">
+              <div className="bg-white/10 p-3 rounded-2xl">
+                <ShieldCheck className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm">Privacidad y Cookies</h3>
+                <p className="text-xs text-stone-400">Utilizamos cookies para mejorar tu experiencia y gestionar los límites de juego.</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => {
+                Cookies.set('cookie_consent', 'true', { expires: 365 });
+                setShowCookieConsent(false);
+              }}
+              className="bg-white text-stone-900 px-8 py-2 rounded-xl font-bold text-sm hover:bg-stone-100 transition-colors"
+            >
+              Aceptar
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* High Scores Modal */}
+      <AnimatePresence>
+        {showHiScores && (
+          <div className="fixed inset-0 z-[2000] bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="p-8 border-b border-stone-100 flex items-center justify-between bg-amber-50/50">
+                <div className="flex items-center gap-4">
+                  <div className="bg-amber-100 p-3 rounded-2xl">
+                    <Trophy className="w-6 h-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-stone-900 tracking-tight">Mejores Puntuaciones</h2>
+                    <p className="text-xs text-stone-500 font-bold uppercase tracking-widest">Top 50 - Menor distancia media</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowHiScores(false)} className="p-2 hover:bg-stone-200 rounded-full transition-colors">
+                  <X className="w-6 h-6 text-stone-400" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-auto p-8">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[10px] font-bold text-stone-400 uppercase tracking-widest border-b border-stone-100">
+                      <th className="pb-4 pl-4">Pos</th>
+                      <th className="pb-4">Usuario / IP</th>
+                      <th className="pb-4">Nivel</th>
+                      <th className="pb-4 text-right pr-4">Puntos (km)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-50">
+                    {hiScoresData.map((score, i) => (
+                      <tr key={i} className="hover:bg-stone-50 transition-colors">
+                        <td className="py-4 pl-4 font-black text-stone-300">#{i + 1}</td>
+                        <td className="py-4">
+                          <div className="text-sm font-bold text-stone-900">{score.mail || 'Anónimo'}</div>
+                          <div className="text-[10px] text-stone-400 font-mono">{score.IP}</div>
+                        </td>
+                        <td className="py-4">
+                          <span className="px-2 py-1 bg-stone-100 rounded text-[10px] font-bold text-stone-600">Nivel {score.nivel}</span>
+                        </td>
+                        <td className="py-4 text-right pr-4 font-black text-emerald-600">{score.puntos.toFixed(1)}</td>
+                      </tr>
+                    ))}
+                    {hiScoresData.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="py-12 text-center text-stone-400 italic">No hay puntuaciones registradas todavía.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Auth Modal */}
+      <AnimatePresence>
+        {showAuthModal && (
+          <div className="fixed inset-0 z-[2000] bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden p-10"
+            >
+              <div className="flex justify-between items-start mb-8">
+                <div>
+                  <h2 className="text-3xl font-black text-stone-900 tracking-tight">
+                    {authMode === 'login' ? 'Bienvenido' : 'Crea tu cuenta'}
+                  </h2>
+                  <p className="text-stone-500 text-sm mt-1">
+                    {authMode === 'login' ? 'Identifícate para guardar tus puntuaciones.' : 'Juega sin límites y compite en el ranking.'}
+                  </p>
+                </div>
+                <button onClick={() => setShowAuthModal(false)} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
+                  <X className="w-6 h-6 text-stone-400" />
+                </button>
+              </div>
+
+              {authError && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm">
+                  <Info className="w-4 h-4 shrink-0" />
+                  <p>{authError}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleAuth} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1.5 ml-1">Email</label>
+                  <input 
+                    type="email" 
+                    required
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    placeholder="tu@email.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1.5 ml-1">Contraseña</label>
+                  <input 
+                    type="password" 
+                    required
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    placeholder="••••••••"
+                  />
+                </div>
+                <button 
+                  disabled={authLoading}
+                  className="w-full bg-stone-900 hover:bg-stone-800 text-white font-black py-4 rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95 disabled:opacity-50 mt-4"
+                >
+                  {authLoading ? 'Cargando...' : (authMode === 'login' ? 'ENTRAR' : 'REGISTRARSE')}
+                </button>
+              </form>
+
+              <div className="mt-8 pt-8 border-t border-stone-100 text-center">
+                <button 
+                  onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+                  className="text-sm font-bold text-stone-400 hover:text-stone-900 transition-colors"
+                >
+                  {authMode === 'login' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Entra'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <style>{`
         .leaflet-container {
