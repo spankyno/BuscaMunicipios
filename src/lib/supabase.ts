@@ -13,7 +13,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 //   id uuid default gen_random_uuid() primary key,
 //   fecha_hora timestamptz default now(),
 //   ip inet,
-//   mail text,
+//   mail text not null,
 //   user_id uuid references auth.users(id),
 //   nivel int4,
 //   puntos int4

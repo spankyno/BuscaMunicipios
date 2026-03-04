@@ -238,7 +238,7 @@ export default function App() {
       const { error } = await supabase.from('hiscores').insert({
         fecha_hora: new Date().toISOString(),
         ip: ip,
-        mail: user?.email || null,
+        mail: user?.email || ip || 'Anónimo',
         user_id: user?.id || null,
         nivel: difficulty,
         puntos: Math.round(averageDistance)
