@@ -214,19 +214,40 @@ export default function App() {
     if (!supabase) return;
     try {
       // Get IP
-      const ipRes = await fetch('https://api.ipify.org?format=json');
-      const { ip } = await ipRes.json();
+      let ip = 'Unknown';
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipRes.json();
+        ip = ipData.ip;
+      } catch (ipErr) {
+        console.warn('Could not fetch IP:', ipErr);
+      }
 
-      if (supabase) {
-        const { error } = await supabase.from('hiscores').insert({
+      const { error } = await supabase.from('hiscores').insert({
+        fecha_hora: new Date().toISOString(),
+        ip: ip,
+        mail: user?.email || null,
+        user_id: user?.id || null,
+        nivel: difficulty,
+        puntos: Math.round(averageDistance)
+      });
+
+      if (error) {
+        console.error('Error saving hi-score:', error);
+        // If it fails, maybe the table name or columns are different?
+        // Let's try to log more info
+        console.log('Attempted to save:', {
           fecha_hora: new Date().toISOString(),
-          IP: ip,
+          ip: ip,
           mail: user?.email || null,
+          user_id: user?.id || null,
           nivel: difficulty,
-          puntos: averageDistance
+          puntos: Math.round(averageDistance)
         });
-
-        if (error) console.error('Error saving hi-score:', error);
+      } else {
+        console.log('Hi-score saved successfully');
+        // Refresh scores if modal is open or about to be
+        fetchHiScores();
       }
     } catch (e) {
       console.error('Failed to save hi-score:', e);
@@ -239,7 +260,7 @@ export default function App() {
     setAuthError(null);
 
     if (!supabase) {
-      setAuthError('El servicio de autenticación no está configurado.');
+      setAuthError('Error de configuración: Las variables VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY no están definidas en el entorno. Asegúrate de que tengan el prefijo VITE_ en Vercel.');
       setAuthLoading(false);
       return;
     }
@@ -249,9 +270,12 @@ export default function App() {
         const { error } = await supabase.auth.signUp({
           email: authEmail,
           password: authPassword,
+          options: {
+            emailRedirectTo: window.location.origin,
+          },
         });
         if (error) throw error;
-        alert('Registro completado. Por favor, verifica tu email.');
+        alert('Registro completado. Por favor, verifica tu email (revisa también la carpeta de Spam).');
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: authEmail,
@@ -945,6 +969,7 @@ export default function App() {
                     <tr className="text-[10px] font-bold text-stone-400 uppercase tracking-widest border-b border-stone-100">
                       <th className="pb-4 pl-4">Pos</th>
                       <th className="pb-4">Usuario / IP</th>
+                      <th className="pb-4">Fecha</th>
                       <th className="pb-4">Nivel</th>
                       <th className="pb-4 text-right pr-4">Puntos (km)</th>
                     </tr>
@@ -955,17 +980,25 @@ export default function App() {
                         <td className="py-4 pl-4 font-black text-stone-300">#{i + 1}</td>
                         <td className="py-4">
                           <div className="text-sm font-bold text-stone-900">{score.mail || 'Anónimo'}</div>
-                          <div className="text-[10px] text-stone-400 font-mono">{score.IP}</div>
+                          <div className="text-[10px] text-stone-400 font-mono">{score.ip}</div>
+                        </td>
+                        <td className="py-4">
+                          <div className="text-[10px] text-stone-500">
+                            {score.fecha_hora ? new Date(score.fecha_hora).toLocaleDateString() : '-'}
+                          </div>
+                          <div className="text-[9px] text-stone-400">
+                            {score.fecha_hora ? new Date(score.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </div>
                         </td>
                         <td className="py-4">
                           <span className="px-2 py-1 bg-stone-100 rounded text-[10px] font-bold text-stone-600">Nivel {score.nivel}</span>
                         </td>
-                        <td className="py-4 text-right pr-4 font-black text-emerald-600">{score.puntos.toFixed(1)}</td>
+                        <td className="py-4 text-right pr-4 font-black text-emerald-600">{score.puntos}</td>
                       </tr>
                     ))}
                     {hiScoresData.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="py-12 text-center text-stone-400 italic">No hay puntuaciones registradas todavía.</td>
+                        <td colSpan={5} className="py-12 text-center text-stone-400 italic">No hay puntuaciones registradas todavía.</td>
                       </tr>
                     )}
                   </tbody>
