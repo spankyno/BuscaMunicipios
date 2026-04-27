@@ -970,7 +970,7 @@ export default function App() {
             </span>
             <span className="flex items-center gap-1">
               <span className="uppercase text-[9px] font-black opacity-50">Blog:</span>
-              <a href="https://aitorblog.infinityfreeapp.com" target="_blank" rel="noopener noreferrer" className="hover:text-stone-600 transition-colors">aitorblog.infinityfreeapp.com</a>
+              <a href="https://aitorsanchez.pages.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-stone-600 transition-colors">aitorsanchez.pages.dev</a>
             </span>
             <span className="flex items-center gap-1">
               <span className="uppercase text-[9px] font-black opacity-50">Más apps:</span>
